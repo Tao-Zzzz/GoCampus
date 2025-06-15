@@ -1,14 +1,16 @@
 package repository
 
 import (
-	"context"
+"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/Tao-Zzzz/GoCampus/user-service/config"
 	"github.com/Tao-Zzzz/GoCampus/user-service/model"
-	_ "github.com/lib/pq" // PostgreSQL driver
+	"github.com/Tao-Zzzz/GoCampus/user-service/pkg/logger"
+	"github.com/mattn/go-sqlite3"
 )
 
 // setupTestDB creates the users table in the PostgreSQL database.
@@ -37,31 +39,30 @@ func cleanupTestDB(t *testing.T, db *sql.DB) {
 }
 
 func TestPostgresRepository_CreateUser(t *testing.T) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("Failed to open test database: %v", err)
+	}
+	defer db.Close()
+
+	// Create schema
+	_, err = db.Exec("CREATE TABLE users (id TEXT, email TEXT, password TEXT, nickname TEXT, avatar TEXT, created_at TIMESTAMP)")
+	if err != nil {
+		t.Fatalf("Failed to create table: %v", err)
+	}
+
 	cfg := &config.Config{
 		Database: config.DatabaseConfig{
-			Driver:   "postgres",
-			Host:     "localhost",
-			Port:     5432,
-			User:     "postgres",       // 替换为您的数据库用户名
-			Password: "123456",    // 替换为您的数据库密码
-			DBName:   "users",    // 替换为您的数据库名称
-			SSLMode:  "disable",
+			Driver: "sqlite3",
+		},
+		Service: config.ServiceConfig		{
+			Name:     "test-service",
+			Port:      8080,
+			LogLevel:   "debug",
 		},
 	}
-
-	db, err := sql.Open(cfg.Database.Driver, cfg.Database.GetDSN())
-	if err != nil {
-		t.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer db.Close() // 测试结束后关闭数据库连接
-
-	// Setup the database schema
-	setupTestDB(t, db)
-	cleanupTestDB(t, db) // 确保测试前清理数据
-	repo, err := NewPostgresRepository(cfg)
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	log := logger.NewLogger(cfg)
+	repo := &PostgresRepository{db: db, logger: log, tracer: otel.Tracer("test-postgres-repository")}
 
 	tests := []struct {
 		name    string
@@ -108,30 +109,20 @@ func TestPostgresRepository_CreateUser(t *testing.T) {
 }
 
 func TestPostgresRepository_GetUserByEmail(t *testing.T) {
+	db, _ := sql.Open("sqlite3", ":memory:")
+	_, _ := db.Exec("CREATE TABLE users (id TEXT, email TEXT, password TEXT, nickname TEXT, nickname TEXT, avatar TEXT, created_at TIMESTAMP)")
 	cfg := &config.Config{
 		Database: config.DatabaseConfig{
-			Driver:   "postgres",
-			Host:     "localhost",
-			Port:     5432,
-			User:     "postgres",       // 替换为您的数据库用户名
-			Password: "123456",    // 替换为您的数据库密码
-			DBName:   "users",    // 替换为您的数据库名称
-			SSLMode:  "disable",
+			Driver: "sqlite3",
+		},
+		Service: config.ServiceConfig{
+			Name:     "test-service",
+			Port:     8080,
+			LogLevel: "debug",
 		},
 	}
-
-	db, err := sql.Open(cfg.Database.Driver, cfg.Database.GetDSN())
-	if err != nil {
-		t.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer db.Close() // 测试结束后关闭数据库连接
-	// Setup the database schema
-	setupTestDB(t, db)
-	cleanupTestDB(t, db)
-	repo, err := NewPostgresRepository(cfg)
-	if err != nil {
-		t.Fatalf("Failed to create repository: %v", err)
-	}
+	log := logger.NewLogger(cfg)
+	repo := &PostgresRepository{db: db, logger: log, tracer: otel.Tracer("test-postgres-repository")}
 
 	// Insert a test user
 	user := &model.User{

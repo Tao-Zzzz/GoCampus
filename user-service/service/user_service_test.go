@@ -5,8 +5,12 @@ import (
 	"errors"
 	"testing"
 	"time"
+
 	"github.com/Tao-Zzzz/GoCampus/user-service/config"
 	"github.com/Tao-Zzzz/GoCampus/user-service/model"
+	"github.com/Tao-Zzzz/GoCampus/user-service/pkg/jwt"
+	"github.com/Tao-Zzzz/GoCampus/user-service/pkg/logger"
+	"github.com/Tao-Zzzz/GoCampus/user-service/pkg/metrics"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -30,6 +34,7 @@ func (m *MockUserRepository) GetUserByID(ctx context.Context, id string) (*model
 }
 
 func TestUserService_Register(t *testing.T) {
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
 	mockRepo := &MockUserRepository{
 		CreateUserFunc: func(ctx context.Context, user *model.User) (string, error) {
 			if user.Email == "test@example.com" {
@@ -49,8 +54,16 @@ func TestUserService_Register(t *testing.T) {
 			Secret:        "secret-key",
 			DurationHours: 24,
 		},
+		Service: config.ServiceConfig{
+			Name:     "test-service",
+			Port:     8080,
+			LogLevel: "debug",
+		},
 	}
-	service := NewUserService(mockRepo, cfg)
+	log := logger.NewLogger(cfg)
+	met := metrics.NewMetrics(cfg)
+	service := NewUserService(mockRepo, cfg, log, met)
+
 
 	tests := []struct {
 		name       string
@@ -123,8 +136,15 @@ func TestUserService_Login(t *testing.T) {
 			Secret:        "secret-key",
 			DurationHours: 24,
 		},
+		Service: config.ServiceConfig{
+			Name:     "test-service",
+			Port:     8080,
+			LogLevel: "debug",
+		},
 	}
-	service := NewUserService(mockRepo, cfg)
+	log := logger.NewLogger(cfg)
+	met := metrics.NewMetrics(cfg)
+	service := NewUserService(mockRepo, cfg, log, met)
 
 	tests := []struct {
 		name     string
@@ -185,8 +205,15 @@ func TestUserService_GetUserInfo(t *testing.T) {
 			Secret:        "secret-key",
 			DurationHours: 24,
 		},
+		Service: config.ServiceConfig{
+			Name:     "test-service",
+			Port:     8080,
+			LogLevel: "debug",
+		},
 	}
-	service := NewUserService(mockRepo, cfg)
+	log := logger.NewLogger(cfg)
+	met := metrics.NewMetrics(cfg)
+	service := NewUserService(mockRepo, cfg, log, met)
 
 	tests := []struct {
 		name     string

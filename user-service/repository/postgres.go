@@ -6,78 +6,121 @@ import (
 	"errors"
 	"github.com/Tao-Zzzz/GoCampus/user-service/config"
 	"github.com/Tao-Zzzz/GoCampus/user-service/model"
+	"github.com/Tao-Zzzz/GoCampus/user-service/pkg/logger"
 	_ "github.com/lib/pq"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
-// PostgresRepository implements the UserRepository interface for PostgreSQL.
+// PostgresRepository implements UserRepository using PostgreSQL.
 type PostgresRepository struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *logger.Logger
+	tracer otel.Tracer
 }
 
 // NewPostgresRepository creates a new PostgresRepository instance.
-func NewPostgresRepository(cfg *config.Config) (*PostgresRepository, error) {
+func NewPostgresRepository(ctx context.Context,
+	cfg *config.Config,
+	log *logger.Logger
+) (*PostgresRepository, error) {
 	db, err := sql.Open(cfg.Database.Driver, cfg.Database.GetDSN())
 	if err != nil {
+		log.Error(ctx).Error(err).Msg("Failed to open database connection")
 		return nil, err
 	}
 	// Verify connection
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(ctx); err != nil {
+		log.Error(ctx).Err(err).Msg("Failed to ping database")
 		return nil, err
 	}
-	return &PostgresRepository{db: db}, nil
+	return &PostgresRepository{
+		db:     db,
+		logger: log,
+		tracer: otel.Tracer("postgres-repository"),
+	}, nil
 }
 
-
-// CreateUser inserts a new user into the database.
+// CreateUserService creates a new user in the database.
 func (r *PostgresRepository) CreateUser(ctx context.Context, user *model.User) (string, error) {
-	query := `
-		INSERT INTO users (id, email, password, nickname, avatar, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id
-	`
-	var userID string
-	err := r.db.QueryRowContext(ctx, query, user.ID, user.Email, user.Password, user.Nickname, user.Avatar, user.CreatedAt).Scan(&userID)
+	ctx, span := r.tracer.Start(ctx, "PostgresRepository.CreateUser")
+	defer span.End()
+
+	r.logger.Info(ctx).Msgf("Creating user with email: %s", user.Email)
+
+	query := "INSERT INTO users (id, email, password, nickname, avatar, created_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
+	_, err := r.db.ExecContext(ctx, query, user.ID, user.Email, user.Password, user.Nickname, user.Avatar, user.CreatedAt)
 	if err != nil {
-		if err.Error() == "pq: duplicate key value violates unique constraint \"users_email_key\"" {
-			return "", errors.New("user already exists")
-		}
-		return "", err
+		r.logger.Error(ctx).Err(err).Msg("Failed to create user in database")
+		span.RecordError(err)
+		return "", errors.New("failed to create user")
 	}
-	return userID, nil
+
+	r.logger.Info(ctx).Msgf("User created successfully: %s", user.ID)
+	span.SetAttributes(attribute.String("user_id", user.ID))
+	return user.ID, nil
 }
 
-// GetUserByEmail retrieves a user by their email address.
+// GetUserByEmail retrieves a user by email.
 func (r *PostgresRepository) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
-	query := `
-		SELECT id, email, password, nickname, avatar, created_at
-		FROM users
-		WHERE email = $1
-	`
+	ctx, span := r.tracer.Start(ctx, "PostgresRepository.GetUserByEmail")
+	defer span.End()
+
+	r.logger.Info(ctx).Msgf("Retrieving user by email: %s", email)
+
 	user := &model.User{}
-	err := r.db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.Password, &user.Nickname, &user.Avatar, &user.CreatedAt)
-	if err == sql.ErrNoRows {
-		return nil, errors.New("user not found")
-	}
+	query := "SELECT id, email, password, nickname, avatar, created_at FROM users WHERE email = $1"
+	err := r.db.QueryRowContext(ctx, query, email).Scan(
+		&user.ID,
+		&user.Email,
+		&user.Password,
+		&user.Nickname,
+		&user.Avatar,
+		&user.CreatedAt,
+	)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, sql.ErrNoRows) {
+			r.logger.Warn(ctx).Msg("User not found by email")
+			return nil, errors.New("user not found")
+		}
+		r.logger.Error(ctx).Err(err).Msg("Failed to retrieve user by email")
+		span.RecordError(err)
+		return nil, errors.New("failed to get user")
 	}
+
+	r.logger.Info(ctx).Msgf("User retrieved by email: %s", email)
+	span.SetAttributes(attribute.String("user_id", user.ID))
 	return user, nil
 }
 
-// GetUserByID retrieves a user by their ID.
+// GetUserByID retrieves a user by ID.
 func (r *PostgresRepository) GetUserByID(ctx context.Context, id string) (*model.User, error) {
-	query := `
-		SELECT id, email, password, nickname, avatar, created_at
-		FROM users
-		WHERE id = $1
-	`
+	ctx, span := r.tracer.Start(ctx, "PostgresRepository.GetUserByID")
+	defer span.End()
+
+	r.logger.Info(ctx).Msgf("Retrieving user by ID: %s", id)
+
 	user := &model.User{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&user.ID, &user.Email, &user.Password, &user.Nickname, &user.Avatar, &user.CreatedAt)
-	if err == sql.ErrNoRows {
-		return nil, errors.New("user not found")
-	}
+	query := "SELECT id, email, password, nickname, avatar, created_at FROM users WHERE id = $1"
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+			&user.ID,
+		&user.Email,
+		&user.Password,
+		&user.Nickname,
+		&user.Avatar,
+		&user.CreatedAt,
+		)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, sql.ErrNoRows) {
+			r.logger.Warn(ctx).Msg("User not found by ID")
+			return nil, errors.New("user not found")
+		}
+		r.logger.Error(ctx).Err(err).Msg("Failed to retrieve user by ID")
+		span.RecordError(err)
+		return nil, errors.New("failed to get user")
 	}
+
+	r.logger.Info(ctx).Msgf("User retrieved by ID: %s", id)
+	span.SetAttributes(attribute.String("user_id", id))
 	return user, nil
 }

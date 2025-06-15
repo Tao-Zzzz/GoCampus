@@ -1,0 +1,21 @@
+.PHONY: all build test run docker-up docker-down proto
+
+all: test build
+
+build:
+	go build -o user-service ./cmd
+
+test:
+	go test ./... -v
+
+run:
+	go run ./cmd
+
+docker-up:
+	docker-compose up -d
+
+docker-down:
+	docker-compose down
+
+proto:
+	protoc --go_out=. --go-grpc_out=. proto/user.proto

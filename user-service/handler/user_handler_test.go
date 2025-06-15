@@ -3,13 +3,18 @@ package handler
 import (
 	"context"
 	"errors"
-	"github.com/Tao-Zzzz/GoCampus/user-service/model"
-	"github.com/Tao-Zzzz/GoCampus/user-service/config"
-	"github.com/Tao-Zzzz/GoCampus/user-service/proto"
-	"github.com/prometheus/client_golang/prometheus/testutil"
-	"golang.org/x/crypto/bcrypt"
 	"testing"
 	"time"
+
+	"github.com/Tao-Zzzz/GoCampus/user-service/config"
+	"github.com/Tao-Zzzz/GoCampus/user-service/model"
+	"github.com/Tao-Zzzz/GoCampus/user-service/pkg/logger"
+	"github.com/Tao-Zzzz/GoCampus/user-service/pkg/metrics"
+	"github.com/Tao-Zzzz/GoCampus/user-service/proto"
+	"github.com/Tao-Zzzz/GoCampus/user-service/service"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // MockUserRepository for testing the service layer.
@@ -32,6 +37,7 @@ func (m *MockUserRepository) GetUserByID(ctx context.Context, id string) (*model
 }
 
 func TestUserHandler_RegisterUser(t *testing.T) {
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
 	mockRepo := &MockUserRepository{
 		CreateUserFunc: func(ctx context.Context, user *model.User) (string, error) {
 			return user.ID, nil
@@ -45,8 +51,15 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			Secret:        "secret-key",
 			DurationHours: 24,
 		},
+		Service: config.ServiceConfig{
+			Name:     "test-service",
+			Port:     8080,
+			LogLevel: "debug",
+		},
 	}
-	handler := NewUserHandler(mockRepo, cfg)
+	log := logger.NewLogger(cfg)
+	met := metrics.NewMetrics(cfg)
+	handler := NewUserHandler(mockRepo, cfg, log, met)
 
 	tests := []struct {
 		name     string
@@ -123,8 +136,15 @@ func TestUserHandler_Login(t *testing.T) {
 			Secret:        "secret-key",
 			DurationHours: 24,
 		},
+		Service: config.ServiceConfig{
+			Name:      "test-service",
+			Port:     8080,
+			NameLogLevel: "debug",
+		},
 	}
-	handler := NewUserHandler(mockRepo, cfg)
+	log := logger.NewLogger(cfg)
+	met := metrics.NewMetricsNewMetrics(cfg)
+	handler := NewUserHandler(handler.NewUserHandler(repo, cfg, log, met))
 
 	tests := []struct {
 		name     string
@@ -178,9 +198,9 @@ func TestUserHandler_GetUserInfo(t *testing.T) {
 				return &model.User{
 					ID:        "user123",
 					Email:     "test@example.com",
-					Nickname:  "TestUser",
-					Avatar:    "http://example.com/avatar.png",
-					CreatedAt: time.Now(),
+					Nickname:   "TestUser",
+					Avatar:     "http://example.com/avatar.png",
+					CreatedAt:   time.Now(),
 				}, nil
 			}
 			return nil, errors.New("user not found")
@@ -191,8 +211,15 @@ func TestUserHandler_GetUserInfo(t *testing.T) {
 			Secret:        "secret-key",
 			DurationHours: 24,
 		},
+		Service: config.ServiceConfig{
+			Name:     "test-service",
+			Port:     8080,
+			LogLevel:  "debug",
+		},
 	}
-	handler := NewUserHandler(mockRepo, cfg)
+	log := logger.NewLogger(cfg)
+	met := metrics.NewMetrics(cfg)
+	handler := NewUserHandler(mockRepo, cfg, log, met)
 
 	tests := []struct {
 		name     string
