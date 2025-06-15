@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package user;
+option go_package = "github.com/Tao-Zzzz/GoCampus/user-service/proto";
+
+// UserService defines the gRPC service for user management.
+service UserService {
+  // RegisterUser creates a new user with email, password, nickname, and avatar.
+  rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse) {}
+  // Login authenticates a user and returns a JWT token.
+  rpc Login(LoginRequest) returns (LoginResponse) {}
+  // GetUserInfo retrieves user details using a JWT token.
+  rpc GetUserInfo(GetUserInfoRequest) returns (GetUserInfoResponse) {}
+}
+
+// RegisterUserRequest contains user registration data.
+message RegisterUserRequest {
+  string email = 1;
+  string password = 2;
+  string nickname = 3;
+  string avatar = 4; // URL or identifier for user avatar
+}
+
+// RegisterUserResponse returns the created user ID and status.
+message RegisterUserResponse {
+  string user_id = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+// LoginRequest contains user login credentials.
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+// LoginResponse returns the JWT token upon successful login.
+message LoginResponse {
+  string token = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+// GetUserInfoRequest contains the user ID for fetching details.
+message GetUserInfoRequest {
+  string user_id = 1;
+}
+
+// GetUserInfoResponse contains user details.
+message GetUserInfoResponse {
+  string user_id = 1;
+  string email = 2;
+  string nickname = 3;
+  string avatar = 4;
+  bool success = 5;
+  string message = 6;
+}
