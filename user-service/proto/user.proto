@@ -1,31 +1,32 @@
 syntax = "proto3";
 
 package user;
+
 option go_package = "github.com/Tao-Zzzz/GoCampus/user-service/proto";
 
-// UserService defines the gRPC service for user management.
+// UserService defines the gRPC service for user-related operations.
 service UserService {
   // RegisterUser creates a new user with email, password, nickname, and avatar.
-  rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse) {}
+  rpc RegisterUser(RegisterRequest) returns (RegisterResponse) {}
   // Login authenticates a user and returns a JWT token.
   rpc Login(LoginRequest) returns (LoginResponse) {}
-  // GetUserInfo retrieves user details using a JWT token.
+  // GetUserInfo retrieves user information using a JWT token.
   rpc GetUserInfo(GetUserInfoRequest) returns (GetUserInfoResponse) {}
 }
 
-// RegisterUserRequest contains user registration data.
-message RegisterUserRequest {
+// RegisterRequest contains user registration data.
+message RegisterRequest {
   string email = 1;
   string password = 2;
   string nickname = 3;
-  string avatar = 4; // URL or identifier for user avatar
+  string avatar = 4; // URL or path to the user's avatar image
 }
 
-// RegisterUserResponse returns the created user ID and status.
-message RegisterUserResponse {
-  string user_id = 1;
-  bool success = 2;
-  string message = 3;
+// RegisterResponse contains the result of the registration.
+message RegisterResponse {
+  bool success = 1;
+  string message = 2;
+  string user_id = 3;
 }
 
 // LoginRequest contains user login credentials.
@@ -34,24 +35,29 @@ message LoginRequest {
   string password = 2;
 }
 
-// LoginResponse returns the JWT token upon successful login.
+// LoginResponse contains the JWT token and login result.
 message LoginResponse {
-  string token = 1;
-  bool success = 2;
-  string message = 3;
+  bool success = 1;
+  string message = 2;
+  string token = 3;
 }
 
-// GetUserInfoRequest contains the user ID for fetching details.
+// GetUserInfoRequest contains the user ID for fetching info.
 message GetUserInfoRequest {
   string user_id = 1;
 }
 
-// GetUserInfoResponse contains user details.
-message GetUserInfoResponse {
+// UserInfo contains the user's details.
+message UserInfo {
   string user_id = 1;
   string email = 2;
   string nickname = 3;
   string avatar = 4;
-  bool success = 5;
-  string message = 6;
+}
+
+// GetUserInfoResponse contains the user's information.
+message GetUserInfoResponse {
+  bool success = 1;
+  string message = 2;
+  UserInfo user = 3;
 }

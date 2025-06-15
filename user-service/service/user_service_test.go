@@ -1,0 +1,210 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
+)
+
+type MockUserRepository struct {
+	CreateUserFunc    func(ctx context.Context, user *User) (string, error)
+	GetUserByEmailFunc func(ctx context.Context, email string) (*User, error)
+	GetUserByIDFunc   func(ctx context.Context, id string) (*User, error)
+}
+
+func (m *MockUserRepository) CreateUser(ctx context.Context, user *User) (string, error) {
+	return m.CreateUserFunc(ctx, user)
+}
+
+func (m *MockUserRepository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	return m.GetUserByEmailFunc(ctx, email)
+}
+
+func (m *MockUserRepository) GetUserByID(ctx context.Context, id string) (*User, error) {
+	return m.GetUserByIDFunc(ctx, id)
+}
+
+func TestUserService_Register(t *testing.T) {
+	mockRepo := &MockUserRepository{
+		CreateUserFunc: func(ctx context.Context, user *User) (string, error) {
+			if user.Email == "test@example.com" {
+				return user.ID, nil
+			}
+			return "", errors.New("failed to create user")
+		},
+		GetUserByEmailFunc: func(ctx context.Context, email string) (*User, error) {
+			if email == "existing@example.com" {
+				return &User{ID: "user123", Email: email}, nil
+			}
+			return nil, errors.New("user not found")
+		},
+	}
+
+	service := NewUserService(mockRepo, "secret-key")
+
+	tests := []struct {
+		name        string
+		email       string
+		password    string
+		nickname    string
+		avatar      string
+		wantErr     bool
+		wantUserID  string
+	}{
+		{
+			name:       "Successful registration",
+			email:      "test@example.com",
+			password:   "password123",
+			nickname:   "TestUser",
+			avatar:     "http://example.com/avatar.png",
+			wantErr:    false,
+			wantUserID: uuid.New().String(), // UUID is generated dynamically
+		},
+		{
+			name:     "User already exists",
+			email:    "existing@example.com",
+			password: "password123",
+			nickname: "TestUser",
+			avatar:   "http://example.com/avatar.png",
+			wantErr:  true,
+		},
+		{
+			name:     "Invalid input",
+			email:    "",
+			password: "password123",
+			nickname: "TestUser",
+			avatar:   "http://example.com/avatar.png",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			userID, err := service.Register(context.Background(), tt.email, tt.password, tt.nickname, tt.avatar)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Register() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && userID == "" {
+				t.Errorf("Register() expected non-empty userID")
+			}
+		})
+	}
+}
+
+func TestUserService_Login(t *testing.T) {
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+	mockRepo := &MockUserRepository{
+		GetUserByEmailFunc: func(ctx context.Context, email string) (*User, error) {
+			if email == "test@example.com" {
+				return &User{
+					ID:       "user123",
+					Email:    email,
+					Password: string(hashedPassword),
+					Nickname: "TestUser",
+					Avatar:   "http://example.com/avatar.png",
+				}, nil
+			}
+			return nil, errors.New("user not found")
+		},
+	}
+
+	service := NewUserService(mockRepo, "secret-key")
+
+	tests := []struct {
+		name     string
+		email    string
+		password string
+		wantErr  bool
+	}{
+		{
+			name:     "Successful login",
+			email:    "test@example.com",
+			password: "password123",
+			wantErr:  false,
+		},
+		{
+			name:     "Invalid credentials",
+			email:    "test@example.com",
+			password: "wrongpassword",
+			wantErr:  true,
+		},
+		{
+			name:     "User not found",
+			email:    "invalid@example.com",
+			password: "password123",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			token, err := service.Login(context.Background(), tt.email, tt.password)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Login() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && token == "" {
+				t.Errorf("Login() expected non-empty token")
+			}
+		})
+	}
+}
+
+func TestUserService_GetUserInfo(t *testing.T) {
+	mockRepo := &MockUserRepository{
+		GetUserByIDFunc: func(ctx context.Context, id string) (*User, error) {
+			if id == "user123" {
+				return &User{
+					ID:       "user123",
+					Email:    "test@example.com",
+					Nickname: "TestUser",
+					Avatar:   "http://example.com/avatar.png",
+				}, nil
+			}
+			return nil, errors.New("user not found")
+		},
+	}
+
+	service := NewUserService(mockRepo, "secret-key")
+
+	tests := []struct {
+		name    string
+		userID  string
+		wantErr bool
+		wantUser *User
+	}{
+		{
+			name:   "Successful get user info",
+			userID: "user123",
+			wantErr: false,
+			wantUser: &User{
+				ID:       "user123",
+				Email:    "test@example.com",
+				Nickname: "TestUser",
+				Avatar:   "http://example.com/avatar.png",
+			},
+		},
+		{
+			name:    "User not found",
+			userID:  "invalid",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			user, err := service.GetUserInfo(context.Background(), tt.userID)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetUserInfo() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && user == nil {
+				t.Errorf("GetUserInfo() expected non-nil user")
+			}
+			if !tt.wantErr && (user.ID != tt.wantUser.ID || user.Email != tt.wantUser.Email ||
+				user.Nickname != tt.wantUser.Nickname || user.Avatar != tt.wantUser.Avatar) {
+				t.Errorf("GetUserInfo() user = %+v, want %+v", user, tt.wantUser)
+			}
+		})
+	}
+}

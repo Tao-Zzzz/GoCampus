@@ -3,96 +3,229 @@ package handler
 import (
 	"context"
 	"errors"
-	"testing"
 	"github.com/Tao-Zzzz/GoCampus/user-service/proto"
 	"github.com/Tao-Zzzz/GoCampus/user-service/service"
-	"github.com/Tao-Zzzz/GoCampus/user-service/pkg/jwt"
-	"github.com/golang/mock/gomock"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"golang.org/x/crypto/bcrypt"
+	"testing"
 )
 
-// Mock dependencies (to be generated using mockgen)
-type mockUserService struct{}
-type mockJWTUtil struct{}
-
-func (m *mockUserService) RegisterUser(ctx context.Context, email, password, nickname, avatar string) (string, error) {
-	if email == "test@example.com" {
-		return "user123", nil
-	}
-	return "", errors.New("invalid email")
+// MockUserRepository for testing the service layer.
+type MockUserRepository struct {
+	CreateUserFunc    func(ctx context.Context, user *service.User) (string, error)
+	GetUserByEmailFunc func(ctx context.Context, email string) (*service.User, error)
+	GetUserByIDFunc   func(ctx context.Context, id string) (*service.User, error)
 }
 
-func (m *mockUserService) Login(ctx context.Context, email, password string) (string, error) {
-	if email == "test@example.com" && password == "password" {
-		return "valid-token", nil
-	}
-	return "", errors.New("invalid credentials")
+func (m *MockUserRepository) CreateUser(ctx context.Context, user *service.User) (string, error) {
+	return m.CreateUserFunc(ctx, user)
 }
 
-func (m *mockUserService) GetUserInfo(ctx context.Context, userID string) (*service.User, error) {
-	if userID == "user123" {
-		return &service.User{
-			ID:       "user123",
-			Email:    "test@example.com",
-			Nickname: "TestUser",
-			Avatar:   "avatar.png",
-		}, nil
-	}
-	return nil, errors.New("user not found")
+func (m *MockUserRepository) GetUserByEmail(ctx context.Context, email string) (*service.User, error) {
+	return m.GetUserByEmailFunc(ctx, email)
 }
 
-func (m *mockJWTUtil) ValidateTokenFromContext(ctx context.Context) (string, error) {
-	if ctx.Value("token") == "valid-token" {
-		return "user123", nil
-	}
-	return "", errors.New("invalid token")
+func (m *MockUserRepository) GetUserByID(ctx context.Context, id string) (*service.User, error) {
+	return m.GetUserByIDFunc(ctx, id)
 }
 
 func TestUserHandler_RegisterUser(t *testing.T) {
-	userService := &mockUserService{}
-	jwtUtil := &mockJWTUtil{}
-	handler := NewUserHandler(userService, jwtUtil)
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+	mockRepo := &MockUserRepository{
+		CreateUserFunc: func(ctx context.Context, user *service.User) (string, error) {
+			return user.ID, nil
+		},
+		GetUserByEmailFunc: func(ctx context.Context, email string) (*service.User, error) {
+			return nil, errors.New("user not found")
+		},
+	}
+	userService := service.NewUserService(mockRepo, "secret-key")
+	handler := NewUserHandler(userService)
 
 	tests := []struct {
-		name    string
-		req     *proto.RegisterUserRequest
-		wantErr bool
+		name     string
+		req      *proto.RegisterRequest
+		wantResp *proto.RegisterResponse
 	}{
 		{
 			name: "Successful registration",
-			req: &proto.RegisterUserRequest{
+			req: &proto.RegisterRequest{
 				Email:    "test@example.com",
-				Password: "password",
+				Password: string(hashedPassword),
 				Nickname: "TestUser",
-				Avatar:   "avatar.png",
+				Avatar:   "http://example.com/avatar.png",
 			},
-			wantErr: false,
+			wantResp: &proto.RegisterResponse{
+				Success: true,
+				Message: "User registered successfully",
+			},
 		},
 		{
-			name: "Invalid email",
-			req: &proto.RegisterUserRequest{
-				Email:    "invalid",
-				Password: "password",
+			name: "Invalid input",
+			req: &proto.RegisterRequest{
+				Email:    "",
+				Password: string(hashedPassword),
 				Nickname: "TestUser",
-				Avatar:   "avatar.png",
+				Avatar:   "http://example.com/avatar.png",
 			},
-			wantErr: true,
+			wantResp: &proto.RegisterResponse{
+				Success: false,
+				Message: "email, password, and nickname are required",
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resp, err := handler.RegisterUser(context.Background(), tt.req)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("RegisterUser() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			if err != nil {
+				t.Fatalf("RegisterUser() error = %v", err)
 			}
-			if !tt.wantErr && resp.UserId != "user123" {
-				t.Errorf("RegisterUser() got UserId = %v, want %v", resp.UserId, "user123")
+			if resp.Success != tt.wantResp.Success || resp.Message != tt.wantResp.Message {
+				t.Errorf("RegisterUser() = %+v, want %+v", resp, tt.wantResp)
+			}
+			if resp.Success && resp.UserId == "" {
+				t.Errorf("RegisterUser() expected non-empty userID")
+			}
+			count := testutil.ToFloat64(handler.requestCounter.WithLabelValues("RegisterUser", "success"))
+			if tt.wantResp.Success && count == 0 {
+				t.Errorf("Expected RegisterUser success metric to be recorded")
 			}
 		})
 	}
 }
 
-// Additional tests for Login and GetUserInfo can be added similarly
+func TestUserHandler_Login(t *testing.T) {
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
+	mockRepo := &MockUserRepository{
+		GetUserByEmailFunc: func(ctx context.Context, email string) (*service.User, error) {
+			if email == "test@example.com" {
+				return &service.User{
+					ID:       "user123",
+					Email:    email,
+					Password: string(hashedPassword),
+					Nickname: "TestUser",
+					Avatar:   "http://example.com/avatar.png",
+				}, nil
+			}
+			return nil, errors.New("user not found")
+		},
+	}
+	userService := service.NewUserService(mockRepo, "secret-key")
+	handler := NewUserHandler(userService)
+
+	tests := []struct {
+		name     string
+		req      *proto.LoginRequest
+		wantResp *proto.LoginResponse
+	}{
+		{
+			name: "Successful login",
+			req: &proto.LoginRequest{
+				Email:    "test@example.com",
+				Password: "password123",
+			},
+			wantResp: &proto.LoginResponse{
+				Success: true,
+				Message: "Login successful",
+			},
+		},
+		{
+			name: "Invalid credentials",
+			req: &proto.LoginRequest{
+				Email:    "test@example.com",
+				Password: "wrongpassword",
+			},
+			wantResp: &proto.LoginResponse{
+				Success: false,
+				Message: "invalid credentials",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := handler.Login(context.Background(), tt.req)
+			if err != nil {
+				t.Fatalf("Login() error = %v", err)
+			}
+			if resp.Success != tt.wantResp.Success || resp.Message != tt.wantResp.Message {
+				t.Errorf("Login() = %+v, want %+v", resp, tt.wantResp)
+			}
+			if tt.wantResp.Success && resp.Token == "" {
+				t.Errorf("Login() expected non-empty token")
+			}
+		})
+	}
+}
+
+func TestUserHandler_GetUserInfo(t *testing.T) {
+	mockRepo := &MockUserRepository{
+		GetUserByIDFunc: func(ctx context.Context, id string) (*service.User, error) {
+			if id == "user123" {
+				return &service.User{
+					ID:       "user123",
+					Email:    "test@example.com",
+					Nickname: "TestUser",
+					Avatar:   "http://example.com/avatar.png",
+				}, nil
+			}
+			return nil, errors.New("user not found")
+		},
+	}
+	userService := service.NewUserService(mockRepo, "secret-key")
+	handler := NewUserHandler(userService)
+
+	tests := []struct {
+		name     string
+		req      *proto.GetUserInfoRequest
+		wantResp *proto.GetUserInfoResponse
+	}{
+		{
+			name: "Successful get user info",
+			req: &proto.GetUserInfoRequest{
+				UserId: "user123",
+			},
+			wantResp: &proto.GetUserInfoResponse{
+				Success: true,
+				Message: "User info retrieved successfully",
+				User: &proto.UserInfo{
+					UserId:   "user123",
+					Email:    "test@example.com",
+					Nickname: "TestUser",
+					Avatar:   "http://example.com/avatar.png",
+				},
+			},
+		},
+		{
+			name: "User not found",
+			req: &proto.GetUserInfoRequest{
+				UserId: "invalid",
+			},
+			wantResp: &proto.GetUserInfoResponse{
+				Success: false,
+				Message: "user not found",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := handler.GetUserInfo(context.Background(), tt.req)
+			if err != nil {
+				t.Fatalf("GetUserInfo() error = %v", err)
+			}
+			if resp.Success != tt.wantResp.Success || resp.Message != tt.wantResp.Message {
+				t.Errorf("GetUserInfo() = %+v, want %+v", resp, tt.wantResp)
+			}
+			if resp.User != nil && tt.wantResp.User != nil {
+				if resp.User.UserId != tt.wantResp.User.UserId ||
+					resp.User.Email != tt.wantResp.User.Email ||
+					resp.User.Nickname != tt.wantResp.User.Nickname ||
+					resp.User.Avatar != tt.wantResp.User.Avatar {
+					t.Errorf("GetUserInfo() User = %+v, want %+v", resp.User, tt.wantResp.User)
+				}
+			}
+		})
+	}
+}
