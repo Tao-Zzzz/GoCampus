@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"time"
-
+	"github.com/Tao-Zzzz/GoCampus/user-service/config"
 	"github.com/Tao-Zzzz/GoCampus/user-service/model"
 	"github.com/Tao-Zzzz/GoCampus/user-service/pkg/jwt"
 	"github.com/google/uuid"
@@ -22,13 +22,15 @@ type UserRepository interface {
 type UserService struct {
 	repo   UserRepository
 	jwtKey string
+	cfg *config.Config
 }
 
 // NewUserService creates a new UserService instance.
-func NewUserService(repo UserRepository, jwtKey string) *UserService {
+func NewUserService(repo UserRepository, cfg *config.Config) *UserService {
 	return &UserService{
 		repo:   repo,
-		jwtKey: jwtKey,
+		jwtKey: cfg.JWT.Secret,
+		cfg : cfg,
 	}
 }
 
@@ -87,7 +89,7 @@ func (s *UserService) Login(ctx context.Context, email, password string) (string
 	}
 
 	// Generate JWT token
-	token, err := jwt.GenerateToken(user.ID, s.jwtKey, 24*time.Hour)
+	token, err := jwt.GenerateToken(user.ID, s.jwtKey, s.jwtDuration())
 	if err != nil {
 		return "", errors.New("failed to generate token")
 	}
@@ -105,4 +107,9 @@ func (s *UserService) GetUserInfo(ctx context.Context, userID string) (*model.Us
 		return nil, errors.New("user not found")
 	}
 	return user, nil
+}
+
+// jwtDuration returns the JWT token duration from the config.
+func (s *UserService) jwtDuration() time.Duration {
+	return time.Duration(s.cfg.JWT.DurationHours) * time.Hour
 }

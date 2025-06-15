@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 	"time"
-
+	"github.com/Tao-Zzzz/GoCampus/user-service/config"
 	"github.com/Tao-Zzzz/GoCampus/user-service/model"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -44,8 +44,13 @@ func TestUserService_Register(t *testing.T) {
 			return nil, errors.New("user not found")
 		},
 	}
-
-	service := NewUserService(mockRepo, "secret-key")
+	cfg := &config.Config{
+		JWT: config.JWTConfig{
+			Secret:        "secret-key",
+			DurationHours: 24,
+		},
+	}
+	service := NewUserService(mockRepo, cfg)
 
 	tests := []struct {
 		name       string
@@ -113,8 +118,13 @@ func TestUserService_Login(t *testing.T) {
 			return nil, errors.New("user not found")
 		},
 	}
-
-	service := NewUserService(mockRepo, "secret-key")
+	cfg := &config.Config{
+		JWT: config.JWTConfig{
+			Secret:        "secret-key",
+			DurationHours: 24,
+		},
+	}
+	service := NewUserService(mockRepo, cfg)
 
 	tests := []struct {
 		name     string
@@ -170,8 +180,13 @@ func TestUserService_GetUserInfo(t *testing.T) {
 			return nil, errors.New("user not found")
 		},
 	}
-
-	service := NewUserService(mockRepo, "secret-key")
+	cfg := &config.Config{
+		JWT: config.JWTConfig{
+			Secret:        "secret-key",
+			DurationHours: 24,
+		},
+	}
+	service := NewUserService(mockRepo, cfg)
 
 	tests := []struct {
 		name     string

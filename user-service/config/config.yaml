@@ -1,0 +1,33 @@
+```yaml
+# Service configuration
+service:
+  name: user-service
+  port: 8080
+
+# Database configuration
+database:
+  driver: postgres
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  dbname: users
+  sslmode: disable
+
+# JWT configuration
+jwt:
+  secret: secret-key
+  duration_hours: 24
+
+# Consul configuration
+consul:
+  enabled: false
+  address: localhost:8500
+  service_id: user-service-1
+
+# etcd configuration
+etcd:
+  enabled: false
+  endpoints:
+    - localhost:2379
+```

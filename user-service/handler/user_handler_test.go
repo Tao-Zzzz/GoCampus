@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"github.com/Tao-Zzzz/GoCampus/user-service/model"
+	"github.com/Tao-Zzzz/GoCampus/user-service/config"
 	"github.com/Tao-Zzzz/GoCampus/user-service/proto"
-	"github.com/Tao-Zzzz/GoCampus/user-service/service"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"golang.org/x/crypto/bcrypt"
 	"testing"
@@ -40,8 +40,13 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			return nil, errors.New("user not found")
 		},
 	}
-	userService := service.NewUserService(mockRepo, "secret-key")
-	handler := NewUserHandler(userService)
+	cfg := &config.Config{
+		JWT: config.JWTConfig{
+			Secret:        "secret-key",
+			DurationHours: 24,
+		},
+	}
+	handler := NewUserHandler(mockRepo, cfg)
 
 	tests := []struct {
 		name     string
@@ -88,7 +93,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			if resp.Success && resp.UserId == "" {
 				t.Errorf("RegisterUser() expected non-empty userID")
 			}
-			count := testutil.ToFloat64(handler.requestCounter.WithLabelValues("RegisterUser", "success"))
+			count := testutil.ToFloat64(requestCounter.WithLabelValues("RegisterUser", "success"))
 			if tt.wantResp.Success && count == 0 {
 				t.Errorf("Expected RegisterUser success metric to be recorded")
 			}
@@ -113,8 +118,13 @@ func TestUserHandler_Login(t *testing.T) {
 			return nil, errors.New("user not found")
 		},
 	}
-	userService := service.NewUserService(mockRepo, "secret-key")
-	handler := NewUserHandler(userService)
+	cfg := &config.Config{
+		JWT: config.JWTConfig{
+			Secret:        "secret-key",
+			DurationHours: 24,
+		},
+	}
+	handler := NewUserHandler(mockRepo, cfg)
 
 	tests := []struct {
 		name     string
@@ -176,8 +186,13 @@ func TestUserHandler_GetUserInfo(t *testing.T) {
 			return nil, errors.New("user not found")
 		},
 	}
-	userService := service.NewUserService(mockRepo, "secret-key")
-	handler := NewUserHandler(userService)
+	cfg := &config.Config{
+		JWT: config.JWTConfig{
+			Secret:        "secret-key",
+			DurationHours: 24,
+		},
+	}
+	handler := NewUserHandler(mockRepo, cfg)
 
 	tests := []struct {
 		name     string

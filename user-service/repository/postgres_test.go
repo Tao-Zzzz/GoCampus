@@ -6,38 +6,62 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Tao-Zzzz/GoCampus/user-service/config"
 	"github.com/Tao-Zzzz/GoCampus/user-service/model"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
-func setupTestDB(t *testing.T) *sql.DB {
-	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("Failed to open test database: %v", err)
-	}
-
+// setupTestDB creates the users table in the PostgreSQL database.
+func setupTestDB(t *testing.T, db *sql.DB) {
 	// Create users table
-	_, err = db.Exec(`
-		CREATE TABLE users (
-			id TEXT PRIMARY KEY,
-			email TEXT UNIQUE NOT NULL,
-			password TEXT NOT NULL,
-			nickname TEXT NOT NULL,
-			avatar TEXT,
-			created_at DATETIME
-		)
+	_, err := db.Exec(`
+	CREATE TABLE IF NOT EXISTS users (
+		id TEXT PRIMARY KEY,
+		email TEXT UNIQUE NOT NULL,
+		password TEXT NOT NULL,
+		nickname TEXT NOT NULL,
+		avatar TEXT,
+		created_at TIMESTAMP
+	)
 	`)
 	if err != nil {
 		t.Fatalf("Failed to create users table: %v", err)
 	}
+}
 
-	return db
+func cleanupTestDB(t *testing.T, db *sql.DB) {
+    _, err := db.Exec("DELETE FROM users")
+    if err != nil {
+        t.Fatalf("Failed to clean up users table: %v", err)
+    }
 }
 
 func TestPostgresRepository_CreateUser(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-	repo := NewPostgresRepository(db)
+	cfg := &config.Config{
+		Database: config.DatabaseConfig{
+			Driver:   "postgres",
+			Host:     "localhost",
+			Port:     5432,
+			User:     "postgres",       // 替换为您的数据库用户名
+			Password: "123456",    // 替换为您的数据库密码
+			DBName:   "users",    // 替换为您的数据库名称
+			SSLMode:  "disable",
+		},
+	}
+
+	db, err := sql.Open(cfg.Database.Driver, cfg.Database.GetDSN())
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close() // 测试结束后关闭数据库连接
+
+	// Setup the database schema
+	setupTestDB(t, db)
+	cleanupTestDB(t, db) // 确保测试前清理数据
+	repo, err := NewPostgresRepository(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create repository: %v", err)
+	}
 
 	tests := []struct {
 		name    string
@@ -47,11 +71,11 @@ func TestPostgresRepository_CreateUser(t *testing.T) {
 		{
 			name: "Successful create user",
 			user: &model.User{
-				ID:        "user123",
-				Email:     "test@example.com",
-				Password:  "hashedpassword",
-				Nickname:  "TestUser",
-				Avatar:    "http://example.com/avatar.png",
+				ID:       "user123",
+				Email:    "test@example.com",
+				Password: "hashedpassword",
+				Nickname: "TestUser",
+				Avatar:   "http://example.com/avatar.png",
 				CreatedAt: time.Now(),
 			},
 			wantErr: false,
@@ -59,11 +83,11 @@ func TestPostgresRepository_CreateUser(t *testing.T) {
 		{
 			name: "Duplicate email",
 			user: &model.User{
-				ID:        "user456",
-				Email:     "test@example.com",
-				Password:  "hashedpassword",
-				Nickname:  "TestUser2",
-				Avatar:    "http://example.com/avatar2.png",
+				ID:       "user456",
+				Email:    "test@example.com",
+				Password: "hashedpassword",
+				Nickname: "TestUser2",
+				Avatar:   "http://example.com/avatar2.png",
 				CreatedAt: time.Now(),
 			},
 			wantErr: true,
@@ -84,20 +108,41 @@ func TestPostgresRepository_CreateUser(t *testing.T) {
 }
 
 func TestPostgresRepository_GetUserByEmail(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-	repo := NewPostgresRepository(db)
+	cfg := &config.Config{
+		Database: config.DatabaseConfig{
+			Driver:   "postgres",
+			Host:     "localhost",
+			Port:     5432,
+			User:     "postgres",       // 替换为您的数据库用户名
+			Password: "123456",    // 替换为您的数据库密码
+			DBName:   "users",    // 替换为您的数据库名称
+			SSLMode:  "disable",
+		},
+	}
+
+	db, err := sql.Open(cfg.Database.Driver, cfg.Database.GetDSN())
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close() // 测试结束后关闭数据库连接
+	// Setup the database schema
+	setupTestDB(t, db)
+	cleanupTestDB(t, db)
+	repo, err := NewPostgresRepository(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create repository: %v", err)
+	}
 
 	// Insert a test user
 	user := &model.User{
-		ID:        "user123",
-		Email:     "test@example.com",
-		Password:  "hashedpassword",
-		Nickname:  "TestUser",
-		Avatar:    "http://example.com/avatar.png",
-		CreatedAt: time.Now().Truncate(time.Millisecond),
+		ID:       "user123",
+		Email:    "test@example.com",
+		Password: "hashedpassword",
+		Nickname: "TestUser",
+		Avatar:   "http://example.com/avatar.png",
+		CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
 	}
-	_, err := repo.CreateUser(context.Background(), user)
+	_, err = repo.CreateUser(context.Background(), user)
 	if err != nil {
 		t.Fatalf("Failed to insert test user: %v", err)
 	}
@@ -109,15 +154,15 @@ func TestPostgresRepository_GetUserByEmail(t *testing.T) {
 		wantUser *model.User
 	}{
 		{
-			name:    "Successful get user by email",
-			email:   "test@example.com",
-			wantErr: false,
+			name:     "Successful get user by email",
+			email:    "test@example.com",
+			wantErr:  false,
 			wantUser: user,
 		},
 		{
-			name:    "User not found",
-			email:   "invalid@example.com",
-			wantErr: true,
+			name:     "User not found",
+			email:    "invalid@example.com",
+			wantErr:  true,
 		},
 	}
 
@@ -129,7 +174,7 @@ func TestPostgresRepository_GetUserByEmail(t *testing.T) {
 			}
 			if !tt.wantErr && (gotUser.ID != tt.wantUser.ID || gotUser.Email != tt.wantUser.Email ||
 				gotUser.Password != tt.wantUser.Password || gotUser.Nickname != tt.wantUser.Nickname ||
-				gotUser.Avatar != tt.wantUser.Avatar || gotUser.CreatedAt.Unix() != tt.wantUser.CreatedAt.Unix()) {
+				gotUser.Avatar != tt.wantUser.Avatar || !gotUser.CreatedAt.UTC().Equal(tt.wantUser.CreatedAt.UTC())) {
 				t.Errorf("GetUserByEmail() user = %+v, want %+v", gotUser, tt.wantUser)
 			}
 		})
@@ -137,20 +182,42 @@ func TestPostgresRepository_GetUserByEmail(t *testing.T) {
 }
 
 func TestPostgresRepository_GetUserByID(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-	repo := NewPostgresRepository(db)
+	cfg := &config.Config{
+		Database: config.DatabaseConfig{
+			Driver:   "postgres",
+			Host:     "localhost",
+			Port:     5432,
+			User:     "postgres",       // 替换为您的数据库用户名
+			Password: "123456",    // 替换为您的数据库密码
+			DBName:   "users",    // 替换为您的数据库名称
+			SSLMode:  "disable",
+		},
+	}
+
+	db, err := sql.Open(cfg.Database.Driver, cfg.Database.GetDSN())
+	if err != nil {
+		t.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer db.Close() // 测试结束后关闭数据库连接
+
+	// Setup the database schema
+	setupTestDB(t, db)
+	cleanupTestDB(t, db)
+	repo, err := NewPostgresRepository(cfg)
+	if err != nil {
+		t.Fatalf("Failed to create repository: %v", err)
+	}
 
 	// Insert a test user
 	user := &model.User{
-		ID:        "user123",
-		Email:     "test@example.com",
-		Password:  "hashedpassword",
-		Nickname:  "TestUser",
-		Avatar:    "http://example.com/avatar.png",
-		CreatedAt: time.Now().Truncate(time.Millisecond),
+		ID:       "user123",
+		Email:    "test@example.com",
+		Password: "hashedpassword",
+		Nickname: "TestUser",
+		Avatar:   "http://example.com/avatar.png",
+		CreatedAt: time.Now().UTC().Truncate(time.Millisecond),
 	}
-	_, err := repo.CreateUser(context.Background(), user)
+	_, err = repo.CreateUser(context.Background(), user)
 	if err != nil {
 		t.Fatalf("Failed to insert test user: %v", err)
 	}
@@ -162,15 +229,15 @@ func TestPostgresRepository_GetUserByID(t *testing.T) {
 		wantUser *model.User
 	}{
 		{
-			name:    "Successful get user by ID",
-			id:      "user123",
-			wantErr: false,
+			name:     "Successful get user by ID",
+			id:       "user123",
+			wantErr:  false,
 			wantUser: user,
 		},
 		{
-			name:    "User not found",
-			id:      "invalid",
-			wantErr: true,
+			name:     "User not found",
+			id:       "invalid",
+			wantErr:  true,
 		},
 	}
 
@@ -182,7 +249,7 @@ func TestPostgresRepository_GetUserByID(t *testing.T) {
 			}
 			if !tt.wantErr && (gotUser.ID != tt.wantUser.ID || gotUser.Email != tt.wantUser.Email ||
 				gotUser.Password != tt.wantUser.Password || gotUser.Nickname != tt.wantUser.Nickname ||
-				gotUser.Avatar != tt.wantUser.Avatar || gotUser.CreatedAt.Unix() != tt.wantUser.CreatedAt.Unix()) {
+				gotUser.Avatar != tt.wantUser.Avatar || !gotUser.CreatedAt.UTC().Equal(tt.wantUser.CreatedAt.UTC())) {
 				t.Errorf("GetUserByID() user = %+v, want %+v", gotUser, tt.wantUser)
 			}
 		})

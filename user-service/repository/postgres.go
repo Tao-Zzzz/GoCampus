@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-
+	"github.com/Tao-Zzzz/GoCampus/user-service/config"
 	"github.com/Tao-Zzzz/GoCampus/user-service/model"
 	_ "github.com/lib/pq"
 )
@@ -15,9 +15,18 @@ type PostgresRepository struct {
 }
 
 // NewPostgresRepository creates a new PostgresRepository instance.
-func NewPostgresRepository(db *sql.DB) *PostgresRepository {
-	return &PostgresRepository{db: db}
+func NewPostgresRepository(cfg *config.Config) (*PostgresRepository, error) {
+	db, err := sql.Open(cfg.Database.Driver, cfg.Database.GetDSN())
+	if err != nil {
+		return nil, err
+	}
+	// Verify connection
+	if err := db.Ping(); err != nil {
+		return nil, err
+	}
+	return &PostgresRepository{db: db}, nil
 }
+
 
 // CreateUser inserts a new user into the database.
 func (r *PostgresRepository) CreateUser(ctx context.Context, user *model.User) (string, error) {
