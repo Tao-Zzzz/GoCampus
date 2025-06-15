@@ -1,8 +1,10 @@
-```yaml
+
 # Service configuration
 service:
   name: user-service
   port: 8080
+  log_level: info
+  
 
 # Database configuration
 database:
@@ -30,4 +32,11 @@ etcd:
   enabled: false
   endpoints:
     - localhost:2379
-```
+tracing:
+  jaeger_enabled: false
+  jaeger_endpoint: http://localhost:14268/api/traces
+  otlp_enabled: false
+  otlp_endpoint: localhost:4317
+# Metrics configuration
+metrics:
+  port: 9090

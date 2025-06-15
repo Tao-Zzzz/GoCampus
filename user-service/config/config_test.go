@@ -11,6 +11,7 @@ func TestLoadConfig(t *testing.T) {
 service:
   name: test-service
   port: 9090
+  log_level: debug
 database:
   driver: postgres
   host: testdb
@@ -30,6 +31,13 @@ etcd:
   enabled: true
   endpoints:
     - etcd:2379
+tracing:
+  jaeger_enabled: true
+  jaeger_endpoint: http://jaeger:14268/api/traces
+  otlp_enabled: false
+  otlp_endpoint: otlp:4317
+metrics:
+  port: 9091
 `
 	tmpFile, err := os.CreateTemp("", "config*.yaml")
 	if err != nil {
@@ -54,6 +62,7 @@ etcd:
 				Service: ServiceConfig{
 					Name: "test-service",
 					Port: 9090,
+					LogLevel: "debug",
 				},
 				Database: DatabaseConfig{
 					Driver:   "postgres",
@@ -77,6 +86,15 @@ etcd:
 					Enabled:   true,
 					Endpoints: []string{"etcd:2379"},
 				},
+				Tracing: TracingConfig{
+					JaegerEnabled:  true,
+					JaegerEndpoint: "http://jaeger:14268/api/traces",
+					OTLPEnabled:    false,
+					OTLPEndpoint:   "otlp:4317",
+				},
+				Metrics: MetricsConfig{
+					Port: "9091",
+				},
 			},
 			wantErr: false,
 		},
@@ -94,7 +112,8 @@ etcd:
 				t.Errorf("LoadConfig() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !tt.wantErr {
-				if cfg.Service.Name != tt.wantCfg.Service.Name || cfg.Service.Port != tt.wantCfg.Service.Port {
+				if cfg.Service.Name != tt.wantCfg.Service.Name || cfg.Service.Port != tt.wantCfg.Service.Port ||
+					cfg.Service.LogLevel != tt.wantCfg.Service.LogLevel {
 					t.Errorf("Service config = %+v, want %+v", cfg.Service, tt.wantCfg.Service)
 				}
 				if cfg.Database.Driver != tt.wantCfg.Database.Driver || cfg.Database.Host != tt.wantCfg.Database.Host ||
@@ -113,6 +132,15 @@ etcd:
 				if cfg.Etcd.Enabled != tt.wantCfg.Etcd.Enabled || len(cfg.Etcd.Endpoints) != len(tt.wantCfg.Etcd.Endpoints) ||
 					cfg.Etcd.Endpoints[0] != tt.wantCfg.Etcd.Endpoints[0] {
 					t.Errorf("Etcd config = %+v, want %+v", cfg.Etcd, tt.wantCfg.Etcd)
+				}
+				if cfg.Tracing.JaegerEnabled != tt.wantCfg.Tracing.JaegerEnabled ||
+					cfg.Tracing.JaegerEndpoint != tt.wantCfg.Tracing.JaegerEndpoint ||
+					cfg.Tracing.OTLPEnabled != tt.wantCfg.Tracing.OTLPEnabled ||
+					cfg.Tracing.OTLPEndpoint != tt.wantCfg.Tracing.OTLPEndpoint {
+					t.Errorf("Tracing config = %+v, want %+v", cfg.Tracing, tt.wantCfg.Tracing)
+				}
+				if cfg.Metrics.Port != tt.wantCfg.Metrics.Port {
+					t.Errorf("Metrics config = %+v, want %+v", cfg.Metrics, tt.wantCfg.Metrics)
 				}
 			}
 		})

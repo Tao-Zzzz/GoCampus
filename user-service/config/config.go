@@ -8,16 +8,23 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	Service ServiceConfig
+	Service  ServiceConfig
 	Database DatabaseConfig
-	JWT JWTConfig
-	Consul ConsulConfig
-	Etcd EtcdConfig
+	JWT      JWTConfig
+	Consul   ConsulConfig
+	Etcd     EtcdConfig
+	Tracing  TracingConfig
+	Metrics  MetricsConfig
+}
+// MetricsConfig holds metrics settings.
+type MetricsConfig struct {
+	Port string `mapstructure:"port"`
 }
 
 type ServiceConfig struct {
-	Name string `mapstructure:"name"`
-	Port int    `mapstructure:"port"`
+	Name     string `mapstructure:"name"`
+	Port     int    `mapstructure:"port"`
+	LogLevel string `mapstructure:"log_level"`
 }
 
 type DatabaseConfig struct {
@@ -44,8 +51,16 @@ type ConsulConfig struct {
 
 // EtcdConfig holds etcd settings.
 type EtcdConfig struct {
-	Enabled   bool
-	Endpoints []string
+	Enabled   bool `mapstructure:"enabled"`
+	Endpoints []string `mapstructure:"endpoints"`
+}
+
+// TracingConfig holds tracing settings.
+type TracingConfig struct {
+    JaegerEnabled  bool   `mapstructure:"jaeger_enabled"`
+    JaegerEndpoint string `mapstructure:"jaeger_endpoint"`
+    OTLPEnabled    bool   `mapstructure:"otlp_enabled"`
+    OTLPEndpoint   string `mapstructure:"otlp_endpoint"`
 }
 
 // LoadConfig initializes and returns the application configuration.
@@ -57,6 +72,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	// Set defaults
 	v.SetDefault("service.name", "user-service")
 	v.SetDefault("service.port", 8080)
+	v.SetDefault("service.log_level", "info")
 	v.SetDefault("database.driver", "postgres")
 	v.SetDefault("database.host", "localhost")
 	v.SetDefault("database.port", 5432)
@@ -72,6 +88,12 @@ func LoadConfig(configPath string) (*Config, error) {
 	v.SetDefault("etcd.enabled", false)
 	v.SetDefault("etcd.endpoints", []string{"localhost:2379"})
 
+	v.SetDefault("tracing.jaeger_enabled", false)
+	v.SetDefault("tracing.jaeger_endpoint", "http://localhost:14268/api/traces")
+	v.SetDefault("tracing.otlp_enabled", false)
+	v.SetDefault("tracing.otlp_endpoint", "localhost:4317")
+
+	v.SetDefault("metrics.port", "9090")
 	// Read config file
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
