@@ -3,39 +3,40 @@ package handler
 import (
 	"context"
 	"errors"
+	"github.com/Tao-Zzzz/GoCampus/user-service/model"
 	"github.com/Tao-Zzzz/GoCampus/user-service/proto"
 	"github.com/Tao-Zzzz/GoCampus/user-service/service"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"golang.org/x/crypto/bcrypt"
 	"testing"
+	"time"
 )
 
 // MockUserRepository for testing the service layer.
 type MockUserRepository struct {
-	CreateUserFunc    func(ctx context.Context, user *service.User) (string, error)
-	GetUserByEmailFunc func(ctx context.Context, email string) (*service.User, error)
-	GetUserByIDFunc   func(ctx context.Context, id string) (*service.User, error)
+	CreateUserFunc    func(ctx context.Context, user *model.User) (string, error)
+	GetUserByEmailFunc func(ctx context.Context, email string) (*model.User, error)
+	GetUserByIDFunc   func(ctx context.Context, id string) (*model.User, error)
 }
 
-func (m *MockUserRepository) CreateUser(ctx context.Context, user *service.User) (string, error) {
+func (m *MockUserRepository) CreateUser(ctx context.Context, user *model.User) (string, error) {
 	return m.CreateUserFunc(ctx, user)
 }
 
-func (m *MockUserRepository) GetUserByEmail(ctx context.Context, email string) (*service.User, error) {
+func (m *MockUserRepository) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
 	return m.GetUserByEmailFunc(ctx, email)
 }
 
-func (m *MockUserRepository) GetUserByID(ctx context.Context, id string) (*service.User, error) {
+func (m *MockUserRepository) GetUserByID(ctx context.Context, id string) (*model.User, error) {
 	return m.GetUserByIDFunc(ctx, id)
 }
 
 func TestUserHandler_RegisterUser(t *testing.T) {
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
 	mockRepo := &MockUserRepository{
-		CreateUserFunc: func(ctx context.Context, user *service.User) (string, error) {
+		CreateUserFunc: func(ctx context.Context, user *model.User) (string, error) {
 			return user.ID, nil
 		},
-		GetUserByEmailFunc: func(ctx context.Context, email string) (*service.User, error) {
+		GetUserByEmailFunc: func(ctx context.Context, email string) (*model.User, error) {
 			return nil, errors.New("user not found")
 		},
 	}
@@ -51,7 +52,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			name: "Successful registration",
 			req: &proto.RegisterRequest{
 				Email:    "test@example.com",
-				Password: string(hashedPassword),
+				Password: "password123",
 				Nickname: "TestUser",
 				Avatar:   "http://example.com/avatar.png",
 			},
@@ -64,7 +65,7 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 			name: "Invalid input",
 			req: &proto.RegisterRequest{
 				Email:    "",
-				Password: string(hashedPassword),
+				Password: "password123",
 				Nickname: "TestUser",
 				Avatar:   "http://example.com/avatar.png",
 			},
@@ -98,14 +99,15 @@ func TestUserHandler_RegisterUser(t *testing.T) {
 func TestUserHandler_Login(t *testing.T) {
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
 	mockRepo := &MockUserRepository{
-		GetUserByEmailFunc: func(ctx context.Context, email string) (*service.User, error) {
+		GetUserByEmailFunc: func(ctx context.Context, email string) (*model.User, error) {
 			if email == "test@example.com" {
-				return &service.User{
-					ID:       "user123",
-					Email:    email,
-					Password: string(hashedPassword),
-					Nickname: "TestUser",
-					Avatar:   "http://example.com/avatar.png",
+				return &model.User{
+					ID:        "user123",
+					Email:     email,
+					Password:  string(hashedPassword),
+					Nickname:  "TestUser",
+					Avatar:    "http://example.com/avatar.png",
+					CreatedAt: time.Now(),
 				}, nil
 			}
 			return nil, errors.New("user not found")
@@ -161,13 +163,14 @@ func TestUserHandler_Login(t *testing.T) {
 
 func TestUserHandler_GetUserInfo(t *testing.T) {
 	mockRepo := &MockUserRepository{
-		GetUserByIDFunc: func(ctx context.Context, id string) (*service.User, error) {
+		GetUserByIDFunc: func(ctx context.Context, id string) (*model.User, error) {
 			if id == "user123" {
-				return &service.User{
-					ID:       "user123",
-					Email:    "test@example.com",
-					Nickname: "TestUser",
-					Avatar:   "http://example.com/avatar.png",
+				return &model.User{
+					ID:        "user123",
+					Email:     "test@example.com",
+					Nickname:  "TestUser",
+					Avatar:    "http://example.com/avatar.png",
+					CreatedAt: time.Now(),
 				}, nil
 			}
 			return nil, errors.New("user not found")

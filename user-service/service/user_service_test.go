@@ -4,39 +4,42 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
+
+	"github.com/Tao-Zzzz/GoCampus/user-service/model"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type MockUserRepository struct {
-	CreateUserFunc    func(ctx context.Context, user *User) (string, error)
-	GetUserByEmailFunc func(ctx context.Context, email string) (*User, error)
-	GetUserByIDFunc   func(ctx context.Context, id string) (*User, error)
+	CreateUserFunc    func(ctx context.Context, user *model.User) (string, error)
+	GetUserByEmailFunc func(ctx context.Context, email string) (*model.User, error)
+	GetUserByIDFunc   func(ctx context.Context, id string) (*model.User, error)
 }
 
-func (m *MockUserRepository) CreateUser(ctx context.Context, user *User) (string, error) {
+func (m *MockUserRepository) CreateUser(ctx context.Context, user *model.User) (string, error) {
 	return m.CreateUserFunc(ctx, user)
 }
 
-func (m *MockUserRepository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+func (m *MockUserRepository) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
 	return m.GetUserByEmailFunc(ctx, email)
 }
 
-func (m *MockUserRepository) GetUserByID(ctx context.Context, id string) (*User, error) {
+func (m *MockUserRepository) GetUserByID(ctx context.Context, id string) (*model.User, error) {
 	return m.GetUserByIDFunc(ctx, id)
 }
 
 func TestUserService_Register(t *testing.T) {
 	mockRepo := &MockUserRepository{
-		CreateUserFunc: func(ctx context.Context, user *User) (string, error) {
+		CreateUserFunc: func(ctx context.Context, user *model.User) (string, error) {
 			if user.Email == "test@example.com" {
 				return user.ID, nil
 			}
 			return "", errors.New("failed to create user")
 		},
-		GetUserByEmailFunc: func(ctx context.Context, email string) (*User, error) {
+		GetUserByEmailFunc: func(ctx context.Context, email string) (*model.User, error) {
 			if email == "existing@example.com" {
-				return &User{ID: "user123", Email: email}, nil
+				return &model.User{ID: "user123", Email: email}, nil
 			}
 			return nil, errors.New("user not found")
 		},
@@ -45,13 +48,13 @@ func TestUserService_Register(t *testing.T) {
 	service := NewUserService(mockRepo, "secret-key")
 
 	tests := []struct {
-		name        string
-		email       string
-		password    string
-		nickname    string
-		avatar      string
-		wantErr     bool
-		wantUserID  string
+		name       string
+		email      string
+		password   string
+		nickname   string
+		avatar     string
+		wantErr    bool
+		wantUserID string
 	}{
 		{
 			name:       "Successful registration",
@@ -96,14 +99,15 @@ func TestUserService_Register(t *testing.T) {
 func TestUserService_Login(t *testing.T) {
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
 	mockRepo := &MockUserRepository{
-		GetUserByEmailFunc: func(ctx context.Context, email string) (*User, error) {
+		GetUserByEmailFunc: func(ctx context.Context, email string) (*model.User, error) {
 			if email == "test@example.com" {
-				return &User{
-					ID:       "user123",
-					Email:    email,
-					Password: string(hashedPassword),
-					Nickname: "TestUser",
-					Avatar:   "http://example.com/avatar.png",
+				return &model.User{
+					ID:        "user123",
+					Email:     email,
+					Password:  string(hashedPassword),
+					Nickname:  "TestUser",
+					Avatar:    "http://example.com/avatar.png",
+					CreatedAt: time.Now(),
 				}, nil
 			}
 			return nil, errors.New("user not found")
@@ -153,13 +157,14 @@ func TestUserService_Login(t *testing.T) {
 
 func TestUserService_GetUserInfo(t *testing.T) {
 	mockRepo := &MockUserRepository{
-		GetUserByIDFunc: func(ctx context.Context, id string) (*User, error) {
+		GetUserByIDFunc: func(ctx context.Context, id string) (*model.User, error) {
 			if id == "user123" {
-				return &User{
-					ID:       "user123",
-					Email:    "test@example.com",
-					Nickname: "TestUser",
-					Avatar:   "http://example.com/avatar.png",
+				return &model.User{
+					ID:        "user123",
+					Email:     "test@example.com",
+					Nickname:  "TestUser",
+					Avatar:    "http://example.com/avatar.png",
+					CreatedAt: time.Now(),
 				}, nil
 			}
 			return nil, errors.New("user not found")
@@ -169,20 +174,20 @@ func TestUserService_GetUserInfo(t *testing.T) {
 	service := NewUserService(mockRepo, "secret-key")
 
 	tests := []struct {
-		name    string
-		userID  string
-		wantErr bool
-		wantUser *User
+		name     string
+		userID   string
+		wantErr  bool
+		wantUser *model.User
 	}{
 		{
 			name:   "Successful get user info",
 			userID: "user123",
 			wantErr: false,
-			wantUser: &User{
-				ID:       "user123",
-				Email:    "test@example.com",
-				Nickname: "TestUser",
-				Avatar:   "http://example.com/avatar.png",
+			wantUser: &model.User{
+				ID:        "user123",
+				Email:     "test@example.com",
+				Nickname:  "TestUser",
+				Avatar:    "http://example.com/avatar.png",
 			},
 		},
 		{

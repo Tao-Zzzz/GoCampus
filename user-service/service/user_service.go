@@ -5,26 +5,17 @@ import (
 	"errors"
 	"time"
 
+	"github.com/Tao-Zzzz/GoCampus/user-service/model"
 	"github.com/Tao-Zzzz/GoCampus/user-service/pkg/jwt"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
-	
 )
-
-// User represents the user model for the service layer.
-type User struct {
-	ID       string
-	Email    string
-	Password string // Hashed password
-	Nickname string
-	Avatar   string
-}
 
 // UserRepository defines the interface for data access.
 type UserRepository interface {
-	CreateUser(ctx context.Context, user *User) (string, error)
-	GetUserByEmail(ctx context.Context, email string) (*User, error)
-	GetUserByID(ctx context.Context, id string) (*User, error)
+	CreateUser(ctx context.Context, user *model.User) (string, error)
+	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
+	GetUserByID(ctx context.Context, id string) (*model.User, error)
 }
 
 // UserService handles user-related business logic.
@@ -61,12 +52,13 @@ func (s *UserService) Register(ctx context.Context, email, password, nickname, a
 	}
 
 	// Create user
-	user := &User{
-		ID:       uuid.New().String(),
-		Email:    email,
-		Password: string(hashedPassword),
-		Nickname: nickname,
-		Avatar:   avatar,
+	user := &model.User{
+		ID:        uuid.New().String(),
+		Email:     email,
+		Password:  string(hashedPassword),
+		Nickname:  nickname,
+		Avatar:    avatar,
+		CreatedAt: time.Now(),
 	}
 
 	userID, err := s.repo.CreateUser(ctx, user)
@@ -103,7 +95,7 @@ func (s *UserService) Login(ctx context.Context, email, password string) (string
 }
 
 // GetUserInfo retrieves user information by ID.
-func (s *UserService) GetUserInfo(ctx context.Context, userID string) (*User, error) {
+func (s *UserService) GetUserInfo(ctx context.Context, userID string) (*model.User, error) {
 	if userID == "" {
 		return nil, errors.New("user ID is required")
 	}
